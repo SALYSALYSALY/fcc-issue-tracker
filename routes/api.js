@@ -1,5 +1,7 @@
 "use strict";
 
+const { Issue } = require("../models");
+
 const IssueModel = require("../models").Issue;
 const ProjectModel = require("../models").Project;
 
@@ -7,8 +9,28 @@ module.exports = function (app) {
   app
     .route("/api/issues/:project")
 
-    .get(function (req, res) {
-      let project = req.params.project;
+    .get(async (req, res) => {
+      let projectName = req.params.project;
+      try {
+        const project = await ProjectModel.findOne({ name: projectName });
+        if (!project) {
+          res.json([{ error: "Couldn't find project" }]);
+          return;
+        } else {
+          const issues = await IssueModel.find({
+            projectId: project._id,
+            ...req.query,
+          });
+          if (!issues) {
+            res.json([{ error: "No issues found" }]);
+            return;
+          }
+          res.json(issues);
+          return;
+        }
+      } catch (err) {
+        res.json({ error: "couldn't get", _id: _id });
+      }
     })
 
     .post(async (req, res) => {
@@ -28,7 +50,7 @@ module.exports = function (app) {
         }
 
         const issueModel = new IssueModel({
-          projectId: projectModelrojectModel._id,
+          projectId: projectModel._id,
           issue_title: issue_title || "",
           issue_text: issue_text || "",
           created_on: new Date(),
@@ -41,15 +63,82 @@ module.exports = function (app) {
         const issue = await issueModel.save();
         res.json(issue);
       } catch (err) {
-        res.json({ error: "enter valid data" });
+        res.json({ error: "couldn't post", _id: _id });
       }
     })
 
-    .put(function (req, res) {
-      let project = req.params.project;
+    .put(async (req, res) => {
+      let projectName = req.params.project;
+      const {
+        _id,
+        issue_title,
+        issue_text,
+        created_on,
+        updated_on,
+        created_by,
+        assigned_to,
+        status_text,
+        open,
+      } = req.body;
+      if (!_id) {
+        res.json({ error: "missing _id" });
+        return;
+      }
+      if (
+        !issue_title &&
+        !issue_text &&
+        !created_on &&
+        !updated_on &&
+        !created_by &&
+        !assigned_to &&
+        !status_text &&
+        !open
+      ) {
+        res.json({ error: "no update field(s) sent", _id: _id });
+        return;
+      }
+
+      try {
+        const projectModel = await ProjectModel.findOne({ name: projectName });
+        if (!projectModel) {
+          throw new Error("Project Not Found");
+        }
+        let issue = await IssueModel.findByIdAndUpdate(_id, {
+          ...req.body,
+          updated_on: new Date(),
+        });
+        await issue.save();
+        res.json({ result: "successfully updated", _id: _id });
+      } catch (err) {
+        res.json({ error: "could not update", _id: _id });
+      }
     })
 
-    .delete(function (req, res) {
-      let project = req.params.project;
+    .delete(async (req, res) => {
+      let projectName = req.params.project;
+      const { _id } = req.body;
+
+      if (!_id) {
+        res.json({ error: "missing _id" });
+        return;
+      }
+      try {
+        const projectModel = await ProjectModel.findOne({
+          name: projectName,
+        });
+        if (!projectModel) {
+          throw new Error("couldn't find project");
+        }
+        const result = await IssueModel.deleteOne({
+          _id: _id,
+          projectId: projectModel._id,
+        });
+        if (result.deletedCount === 0) {
+          throw new Error("ID not found");
+        }
+        res.json({ result: "successfully deleted", _id: _id });
+      } catch (err) {
+        res.json({ error: "could not delete", _id: _id });
+      }
     });
 };
